@@ -1,0 +1,21 @@
+﻿Аккаунты сайта mincifra-practica.ru
+
+Администратор
+ФИО: Администратор системы
+Логин: admin@practice.local
+Пароль: Q7vN4pX9sK2mR8tL
+
+Руководитель практики
+ФИО: Анна Сергеевна Волкова
+Логин: mentor@practice.local
+Пароль: W6cF3yH8nP5dJ2qA
+
+Руководитель практики
+ФИО: Михаил Олегович Соколов
+Логин: mentor2@practice.local
+Пароль: Z9kB4uM7eT2xC6rV
+
+Практикант
+ФИО: Иван Петров Тестовый
+Логин: intern@test.local
+Пароль: demo123

@@ -1,0 +1,32 @@
+Options -Indexes
+DirectoryIndex index.php
+LimitRequestBody 12582912
+
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "same-origin"
+    Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^(?:data|uploads)(?:/|$) - [F,L]
+
+    RewriteCond %{REQUEST_METHOD} ^TRACE [NC]
+    RewriteRule .* - [F,L]
+
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+    RewriteCond %{HTTP_HOST} ^(?:www\.)?mincifra-practica\.ru$ [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+<FilesMatch "^(?:config|mail_config|mail_config\.example)\.php$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(?:sqlite|db|ini|log|md|txt|sql|bak|old|zip)$">
+    Require all denied
+</FilesMatch>
