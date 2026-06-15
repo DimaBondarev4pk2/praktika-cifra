@@ -527,8 +527,8 @@ if ($current) {
             document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
         })();
     </script>
-    <link rel="stylesheet" href="assets/style.css?v=20260606-mobile-theme">
-    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260608-intern-detail">
+    <link rel="stylesheet" href="assets/style.css?v=20260616-register-polish">
+    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-register-polish">
 </head>
 <body>
 <header class="topbar">

@@ -43,3 +43,44 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
 @media(max-width:650px){.topbar{padding:10px 12px}.topbar-shell{padding:10px;border-radius:18px}.topbar .brand{min-width:0}.topbar .brand>img{width:122px;height:42px}.topbar .brand span:last-child{display:none}.location-section{padding-left:12px;padding-right:12px}.location-card{padding:18px}.location-copy{padding:10px}.map-frame{height:500px;min-height:500px}.map-frame iframe{min-height:500px}.footer-bottom{display:grid}}
 
 .role-option{display:flex;align-items:center;gap:10px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font-size:14px}.role-option input{width:auto;accent-color:var(--blue)}.nested-grid{max-width:none;margin:0}.register-group.full{grid-column:1/-1}.inline-actions{display:inline-flex;margin:2px 4px 2px 0}.badge.warn{background:#fff4d6;color:#9a6400}.badge.ok{background:#e7f8ef;color:#177346}
+
+/* Registration form polish */
+[data-register-form] h3.full{
+  text-align:center;
+  font-size:22px;
+  line-height:1.25;
+  margin:18px 0 6px;
+  padding-bottom:0;
+  border-bottom:0;
+  color:var(--ink);
+}
+[data-register-form] label{
+  text-align:center;
+  font-size:15px;
+  line-height:1.35;
+}
+[data-register-form] input,
+[data-register-form] select,
+[data-register-form] textarea{
+  text-align:left;
+}
+[data-register-form] .role-option{
+  justify-content:center;
+  min-height:48px;
+  padding:6px 10px;
+  border:0!important;
+  border-radius:0;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--ink);
+  font-size:18px;
+  font-weight:800;
+}
+[data-register-form] .role-option input{
+  width:18px;
+  height:18px;
+  margin:0;
+}
+[data-register-form] .nested-grid{
+  width:100%;
+}

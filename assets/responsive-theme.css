@@ -2641,3 +2641,14 @@ html[data-theme="light"] .role-option{background:#fff;color:#13213c;border-color
 html[data-theme="dark"] .role-option{background:#0f2038;color:#eaf2ff;border-color:#31517a}
 html[data-theme="dark"] .badge.warn{background:#3b2d0a;color:#ffd76b}
 html[data-theme="dark"] .badge.ok{background:#0f3d2a;color:#8cf0b6}
+
+html[data-theme="light"] [data-register-form] .role-option,
+html[data-theme="dark"] [data-register-form] .role-option{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] [data-register-form] h3.full,
+html[data-theme="dark"] [data-register-form] .role-option{
+  color:#eaf2ff!important;
+}
