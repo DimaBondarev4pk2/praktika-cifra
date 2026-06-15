@@ -613,13 +613,16 @@ if ($current) {
             <label class="role-option"><input type="radio" name="account_type" value="intern" checked> Практикант</label>
             <label class="role-option"><input type="radio" name="account_type" value="mentor"> Руководитель практики</label>
         </div>
+        <div class="mentor-register-notice full" data-register-mentor-notice hidden>
+            <b>Регистрацию руководителя должен подтвердить администратор.</b>
+            <span>После отправки заявки вход в кабинет будет закрыт до подтверждения.</span>
+        </div>
         <h3 class="full">Личные данные</h3><label>ФИО *<input name="full_name" required></label><label>Email *<input type="email" name="email" required></label><label>Телефон<input name="phone"></label><label>Пароль *<input type="password" name="password" minlength="8" required></label>
         <div class="register-group full" data-register-group="mentor" hidden>
             <div class="form-grid nested-grid">
                 <h3 class="full">Данные руководителя</h3>
                 <label>Отдел *<input name="department" data-required-for="mentor"></label>
                 <label>Должность *<input name="position" data-required-for="mentor"></label>
-                <p class="muted full">После отправки заявки администратор проверит данные и подтвердит регистрацию. До подтверждения вход в кабинет будет закрыт.</p>
             </div>
         </div>
         <div class="register-group full" data-register-group="intern">
@@ -764,7 +767,7 @@ if ($current) {
     </div>
     <button class="button small" type="button" data-cookie-accept>Понятно</button>
 </div>
-<script src="assets/app.js?v=20260607-security-hardening"></script>
+<script src="assets/app.js?v=20260616-register-switch"></script>
 </body></html>
 <?php
 function render_intern_table(PDO $db, array $interns, bool $withConclusion = false): void { ?>

@@ -2652,3 +2652,11 @@ html[data-theme="dark"] [data-register-form] h3.full,
 html[data-theme="dark"] [data-register-form] .role-option{
   color:#eaf2ff!important;
 }
+html[data-theme="dark"] [data-register-form] .mentor-register-notice{
+  background:linear-gradient(135deg,#10294d,#0b1c34)!important;
+  border-color:#31517a!important;
+  color:#eaf2ff!important;
+}
+html[data-theme="dark"] [data-register-form] .mentor-register-notice span{
+  color:#b8c8e3!important;
+}

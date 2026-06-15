@@ -71,6 +71,7 @@ cookieAccept?.addEventListener('click', () => {
 if (registerForm) {
   const roleInputs = registerForm.querySelectorAll('input[name="account_type"]');
   const groups = registerForm.querySelectorAll('[data-register-group]');
+  const mentorNotice = registerForm.querySelector('[data-register-mentor-notice]');
 
   function syncRegisterRole() {
     const selected = registerForm.querySelector('input[name="account_type"]:checked')?.value || 'intern';
@@ -78,12 +79,23 @@ if (registerForm) {
     groups.forEach((group) => {
       const isActive = group.dataset.registerGroup === selected;
       group.hidden = !isActive;
+      group.setAttribute('aria-hidden', String(!isActive));
+
+      group.querySelectorAll('input, select, textarea').forEach((field) => {
+        field.disabled = !isActive;
+      });
+
       group.querySelectorAll('[data-required-for]').forEach((field) => {
-        field.required = field.dataset.requiredFor === selected;
+        field.required = isActive && field.dataset.requiredFor === selected;
       });
     });
+
+    if (mentorNotice) {
+      mentorNotice.hidden = selected !== 'mentor';
+    }
   }
 
   roleInputs.forEach((input) => input.addEventListener('change', syncRegisterRole));
+  roleInputs.forEach((input) => input.addEventListener('click', syncRegisterRole));
   syncRegisterRole();
 }

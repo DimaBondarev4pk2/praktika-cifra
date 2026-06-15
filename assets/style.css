@@ -72,6 +72,29 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
   flex-wrap:wrap;
   margin:4px 0 16px;
 }
+[data-register-form] .mentor-register-notice{
+  max-width:620px;
+  justify-self:center;
+  margin:0 auto 12px;
+  padding:16px 18px;
+  border:1px solid #aecaef;
+  border-radius:16px;
+  background:linear-gradient(135deg,#eef5ff,#ffffff);
+  color:#18345f;
+  box-shadow:0 16px 34px rgba(20,87,217,.12);
+  text-align:center;
+}
+[data-register-form] .mentor-register-notice b{
+  display:block;
+  font-size:16px;
+  line-height:1.35;
+}
+[data-register-form] .mentor-register-notice span{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  font-size:14px;
+}
 [data-register-form] .role-option{
   justify-content:flex-start;
   width:auto;
@@ -104,6 +127,10 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
     gap:12px;
     display:grid;
     justify-items:center;
+  }
+  [data-register-form] .mentor-register-notice{
+    padding:14px;
+    margin-bottom:8px;
   }
   [data-register-form] .role-option{
     justify-content:center;
