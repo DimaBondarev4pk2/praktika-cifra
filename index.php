@@ -18,6 +18,7 @@ function action_redirect_target(string $action): string
         'upload_report', 'review_report' => 'index.php?page=reports',
         'add_diary', 'review_diary' => 'index.php?page=diary',
         'update_profile' => 'index.php?page=profile',
+        'approve_mentor', 'reject_mentor' => 'index.php?page=users',
         'assign_mentor', 'assign_bulk' => 'index.php?page=assignments',
         'finalize' => 'index.php?page=interns',
         default => user() ? 'index.php?page=dashboard' : 'index.php?page=login',
@@ -57,7 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'register') {
-    $required = ['full_name', 'email', 'password', 'university', 'specialty', 'course', 'practice_topic', 'start_date', 'end_date', 'mentor_id'];
+    $accountType = ($_POST['account_type'] ?? 'intern') === 'mentor' ? 'mentor' : 'intern';
+    $required = $accountType === 'mentor'
+        ? ['full_name', 'email', 'password', 'department', 'position']
+        : ['full_name', 'email', 'password', 'university', 'specialty', 'course', 'practice_topic', 'start_date', 'end_date', 'mentor_id'];
     foreach ($required as $field) {
         if (trim((string)($_POST[$field] ?? '')) === '') {
             flash('Заполните все обязательные поля.', 'error');
@@ -68,12 +72,30 @@ if ($action === 'register') {
         flash('Проверьте email. Пароль должен содержать не менее 8 символов.', 'error');
         redirect('index.php?page=register');
     }
-    if ($_POST['end_date'] < $_POST['start_date']) {
+    if ($accountType === 'intern' && $_POST['end_date'] < $_POST['start_date']) {
         flash('Дата окончания не может быть раньше даты начала.', 'error');
+        redirect('index.php?page=register');
+    }
+    if ($accountType === 'intern' && !fetch_one($db, "SELECT id FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [(int)$_POST['mentor_id']])) {
+        flash('Выберите подтверждённого руководителя практики.', 'error');
         redirect('index.php?page=register');
     }
     try {
         $db->beginTransaction();
+        if ($accountType === 'mentor') {
+            $stmt = $db->prepare("INSERT INTO users (full_name, email, password_hash, role, mentor_status, phone, department, position) VALUES (?, ?, ?, 'mentor', 'pending', ?, ?, ?)");
+            $stmt->execute([
+                trim($_POST['full_name']),
+                strtolower(trim($_POST['email'])),
+                password_hash($_POST['password'], PASSWORD_DEFAULT),
+                trim($_POST['phone'] ?? ''),
+                trim($_POST['department']),
+                trim($_POST['position']),
+            ]);
+            $db->commit();
+            flash('Заявка руководителя отправлена. Войти в кабинет можно будет после подтверждения администратором.');
+            redirect('index.php?page=login');
+        }
         $stmt = $db->prepare("INSERT INTO users (full_name, email, password_hash, role, phone) VALUES (?, ?, ?, 'intern', ?)");
         $stmt->execute([trim($_POST['full_name']), strtolower(trim($_POST['email'])), password_hash($_POST['password'], PASSWORD_DEFAULT), trim($_POST['phone'] ?? '')]);
         $id = (int)$db->lastInsertId();
@@ -99,6 +121,10 @@ if ($action === 'login') {
     $account = fetch_one($db, 'SELECT * FROM users WHERE email = ?', [$email]);
     if (!$account || !password_verify($_POST['password'] ?? '', $account['password_hash'])) {
         flash('Неверный email или пароль.', 'error');
+        redirect('index.php?page=login');
+    }
+    if (($account['role'] ?? '') === 'mentor' && ($account['mentor_status'] ?? 'approved') !== 'approved') {
+        flash('Регистрация руководителя ещё ожидает подтверждения администратором.', 'error');
         redirect('index.php?page=login');
     }
     rate_limit_clear($db, $loginRateKey);
@@ -214,7 +240,7 @@ if ($action === 'update_profile') {
         flash('Дата окончания не может быть раньше даты начала.', 'error');
         redirect('index.php?page=profile');
     }
-    if (!fetch_one($db, "SELECT id FROM users WHERE id = ? AND role = 'mentor'", [$mentorId])) {
+    if (!fetch_one($db, "SELECT id FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [$mentorId])) {
         flash('Выберите действующего руководителя практики.', 'error');
         redirect('index.php?page=profile');
     }
@@ -358,7 +384,7 @@ if ($action === 'assign_mentor') {
     $internId = (int)($_POST['intern_id'] ?? 0);
     $mentorId = trim((string)($_POST['mentor_id'] ?? '')) === '' ? null : (int)$_POST['mentor_id'];
     $intern = fetch_one($db, "SELECT u.id, u.full_name FROM users u JOIN intern_profiles p ON p.user_id = u.id WHERE u.id = ? AND u.role = 'intern'", [$internId]);
-    $mentor = $mentorId ? fetch_one($db, "SELECT id, full_name FROM users WHERE id = ? AND role = 'mentor'", [$mentorId]) : null;
+    $mentor = $mentorId ? fetch_one($db, "SELECT id, full_name FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [$mentorId]) : null;
     if (!$intern) {
         flash('Практикант не найден.', 'error');
         redirect('index.php?page=assignments');
@@ -377,11 +403,29 @@ if ($action === 'assign_mentor') {
     redirect('index.php?page=assignments');
 }
 
+if ($action === 'approve_mentor') {
+    require_role('admin');
+    $mentorId = (int)($_POST['mentor_id'] ?? 0);
+    $stmt = $db->prepare("UPDATE users SET mentor_status = 'approved' WHERE id = ? AND role = 'mentor'");
+    $stmt->execute([$mentorId]);
+    flash($stmt->rowCount() > 0 ? 'Регистрация руководителя подтверждена.' : 'Заявка руководителя не найдена.');
+    redirect('index.php?page=users');
+}
+
+if ($action === 'reject_mentor') {
+    require_role('admin');
+    $mentorId = (int)($_POST['mentor_id'] ?? 0);
+    $stmt = $db->prepare("DELETE FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'pending'");
+    $stmt->execute([$mentorId]);
+    flash($stmt->rowCount() > 0 ? 'Заявка руководителя отклонена и удалена.' : 'Можно отклонить только неподтвержденную заявку руководителя.');
+    redirect('index.php?page=users');
+}
+
 if ($action === 'assign_bulk') {
     require_role('admin');
     $mentorId = (int)($_POST['mentor_id'] ?? 0);
     $internIds = array_values(array_unique(array_filter(array_map('intval', $_POST['intern_ids'] ?? []))));
-    $mentor = fetch_one($db, "SELECT id, full_name FROM users WHERE id = ? AND role = 'mentor'", [$mentorId]);
+    $mentor = fetch_one($db, "SELECT id, full_name FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [$mentorId]);
     if (!$mentor) {
         flash('Выберите действующего руководителя для массового назначения.', 'error');
         redirect('index.php?page=assignments');
@@ -442,7 +486,7 @@ if ($action === 'download') {
 $page = $_GET['page'] ?? (user() ? 'dashboard' : 'home');
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
-$mentors = fetch_all($db, "SELECT id, full_name, department, position FROM users WHERE role = 'mentor' ORDER BY full_name");
+$mentors = fetch_all($db, "SELECT id, full_name, department, position FROM users WHERE role = 'mentor' AND mentor_status = 'approved' ORDER BY full_name");
 $publicPages = ['home', 'about', 'login', 'register', 'forgot', 'reset'];
 $current = user();
 if (!in_array($page, $publicPages, true)) {
@@ -562,10 +606,26 @@ if ($current) {
         <?php endif; ?>
     </section>
 <?php elseif ($page === 'register'): ?>
-    <section class="page-head compact"><span class="eyebrow">Новая заявка</span><h1>Регистрация практиканта</h1><p>Заполните данные практики и сразу выберите руководителя.</p></section>
-    <form class="panel form-grid" method="post"><input type="hidden" name="action" value="register"><?= csrf_field() ?>
+    <section class="page-head compact"><span class="eyebrow">Новая заявка</span><h1>Регистрация в системе</h1><p>Практикант создаёт аккаунт сразу, а регистрация руководителя активируется после подтверждения администратором.</p></section>
+    <form class="panel form-grid" method="post" data-register-form><input type="hidden" name="action" value="register"><?= csrf_field() ?>
+        <h3 class="full">Тип аккаунта</h3>
+        <label class="role-option"><input type="radio" name="account_type" value="intern" checked> Практикант</label>
+        <label class="role-option"><input type="radio" name="account_type" value="mentor"> Руководитель практики</label>
         <h3 class="full">Личные данные</h3><label>ФИО *<input name="full_name" required></label><label>Email *<input type="email" name="email" required></label><label>Телефон<input name="phone"></label><label>Пароль *<input type="password" name="password" minlength="8" required></label>
-        <h3 class="full">Обучение и практика</h3><label>Учебное заведение *<input name="university" required></label><label>Направление подготовки *<input name="specialty" required></label><label>Курс *<input type="number" min="1" max="6" name="course" required></label><label>Группа<input name="group_name"></label><label class="full">Тема практики *<input name="practice_topic" required></label><label>Дата начала *<input type="date" name="start_date" required></label><label>Дата окончания *<input type="date" name="end_date" required></label><label class="full">Руководитель *<select name="mentor_id" required><option value="">Выберите руководителя</option><?php foreach ($mentors as $mentor): ?><option value="<?= $mentor['id'] ?>"><?= e($mentor['full_name'] . ' — ' . $mentor['department']) ?></option><?php endforeach; ?></select></label><button class="button full" type="submit">Создать аккаунт</button>
+        <div class="register-group full" data-register-group="mentor" hidden>
+            <div class="form-grid nested-grid">
+                <h3 class="full">Данные руководителя</h3>
+                <label>Отдел *<input name="department" data-required-for="mentor"></label>
+                <label>Должность *<input name="position" data-required-for="mentor"></label>
+                <p class="muted full">После отправки заявки администратор проверит данные и подтвердит регистрацию. До подтверждения вход в кабинет будет закрыт.</p>
+            </div>
+        </div>
+        <div class="register-group full" data-register-group="intern">
+            <div class="form-grid nested-grid">
+                <h3 class="full">Обучение и практика</h3><label>Учебное заведение *<input name="university" data-required-for="intern" required></label><label>Направление подготовки *<input name="specialty" data-required-for="intern" required></label><label>Курс *<input type="number" min="1" max="6" name="course" data-required-for="intern" required></label><label>Группа<input name="group_name"></label><label class="full">Тема практики *<input name="practice_topic" data-required-for="intern" required></label><label>Дата начала *<input type="date" name="start_date" data-required-for="intern" required></label><label>Дата окончания *<input type="date" name="end_date" data-required-for="intern" required></label><label class="full">Руководитель *<select name="mentor_id" data-required-for="intern" required><option value="">Выберите руководителя</option><?php foreach ($mentors as $mentor): ?><option value="<?= $mentor['id'] ?>"><?= e($mentor['full_name'] . ' — ' . $mentor['department']) ?></option><?php endforeach; ?></select></label>
+            </div>
+        </div>
+        <button class="button full" type="submit">Создать аккаунт</button>
     </form>
 <?php else: ?>
     <section class="dashboard-head"><div><span class="eyebrow"><?= e(role_name($current['role'])) ?></span><h1><?= e($pageTitle) ?></h1></div><div class="user-chip"><span><img src="assets/mincifra-symbol.jpg" alt=""></span><div><b><?= e($current['full_name']) ?></b></div></div></section>
@@ -582,8 +642,8 @@ if ($current) {
         <div class="stat-grid"><article class="stat"><span>Практикантов</span><strong><?= count($interns) ?></strong></article><article class="stat"><span>Отчётов на проверке</span><strong><?= $pending ?></strong></article><article class="stat"><span>Записей дневника</span><strong><?= $pendingDiary ?></strong></article><article class="stat"><span>Средний прогресс</span><strong><?= count($interns) ? round(array_sum(array_map(fn($i) => progress($db, (int)$i['id']), $interns)) / count($interns)) : 0 ?>%</strong></article></div>
         <section class="panel"><div class="panel-head"><h2>Прогресс практикантов</h2><a href="index.php?page=interns">Все практиканты →</a></div><?php render_intern_table($db, $interns); ?></section>
     <?php elseif ($page === 'dashboard' && $current['role'] === 'admin'):
-        $counts = []; foreach (['intern','mentor','admin'] as $r) $counts[$r]=(int)fetch_one($db,'SELECT COUNT(*) c FROM users WHERE role=?',[$r])['c']; ?>
-        <div class="stat-grid"><article class="stat"><span>Практикантов</span><strong><?= $counts['intern'] ?></strong></article><article class="stat"><span>Руководителей</span><strong><?= $counts['mentor'] ?></strong></article><article class="stat"><span>Всего пользователей</span><strong><?= array_sum($counts) ?></strong></article></div><section class="panel"><h2>Управление системой</h2><div class="quick"><a href="index.php?page=users">Список пользователей <b>→</b></a><a href="index.php?page=assignments">Изменить назначения <b>→</b></a></div></section>
+        $counts = []; foreach (['intern','mentor','admin'] as $r) $counts[$r]=(int)fetch_one($db,'SELECT COUNT(*) c FROM users WHERE role=?',[$r])['c']; $pendingMentors=(int)fetch_one($db,"SELECT COUNT(*) c FROM users WHERE role='mentor' AND mentor_status='pending'")['c']; ?>
+        <div class="stat-grid"><article class="stat"><span>Практикантов</span><strong><?= $counts['intern'] ?></strong></article><article class="stat"><span>Руководителей</span><strong><?= $counts['mentor'] ?></strong></article><article class="stat"><span>Заявок руководителей</span><strong><?= $pendingMentors ?></strong></article><article class="stat"><span>Всего пользователей</span><strong><?= array_sum($counts) ?></strong></article></div><section class="panel"><h2>Управление системой</h2><div class="quick"><a href="index.php?page=users">Список пользователей <b>→</b></a><a href="index.php?page=assignments">Изменить назначения <b>→</b></a></div></section>
     <?php elseif ($page === 'tasks'):
         if ($current['role'] === 'intern') $tasks=fetch_all($db,'SELECT t.*, u.full_name mentor_name FROM tasks t JOIN users u ON u.id=t.mentor_id WHERE intern_id=? ORDER BY due_date',[$current['id']]);
         else { $tasks=fetch_all($db,'SELECT t.*, u.full_name intern_name FROM tasks t JOIN users u ON u.id=t.intern_id JOIN intern_profiles p ON p.user_id=t.intern_id WHERE p.mentor_id=? ORDER BY due_date',[$current['id']]); $interns=fetch_all($db,'SELECT u.id,u.full_name FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE p.mentor_id=?',[$current['id']]); } ?>
@@ -663,9 +723,9 @@ if ($current) {
             <button class="button full" type="submit">Сохранить изменения</button>
         </form>
     <?php elseif ($page === 'users' && $current['role']==='admin'):
-        $users=fetch_all($db,'SELECT * FROM users ORDER BY created_at DESC');?><section class="panel table-wrap"><table><thead><tr><th>Пользователь</th><th>Роль</th><th>Email</th><th>Дата регистрации</th></tr></thead><tbody><?php foreach($users as $u):?><tr><td><b><?=e($u['full_name'])?></b></td><td><span class="badge"><?=e(role_name($u['role']))?></span></td><td><?=e($u['email'])?></td><td><?=e(substr($u['created_at'],0,10))?></td></tr><?php endforeach;?></tbody></table></section>
+        $users=fetch_all($db,'SELECT * FROM users ORDER BY created_at DESC');?><section class="panel table-wrap"><table><thead><tr><th>Пользователь</th><th>Роль</th><th>Email</th><th>Статус</th><th>Дата регистрации</th><th>Действия</th></tr></thead><tbody><?php foreach($users as $u): $isPendingMentor=$u['role']==='mentor' && ($u['mentor_status'] ?? 'approved')==='pending';?><tr><td><b><?=e($u['full_name'])?></b><?php if($u['department']):?><small><?=e($u['department'])?><?= $u['position'] ? ' · '.e($u['position']) : '' ?></small><?php endif;?></td><td><span class="badge"><?=e(role_name($u['role']))?></span></td><td><?=e($u['email'])?></td><td><?= $u['role']==='mentor' ? ($isPendingMentor ? '<span class="badge warn">Ожидает подтверждения</span>' : '<span class="badge ok">Подтверждён</span>') : '—' ?></td><td><?=e(substr($u['created_at'],0,10))?></td><td><?php if($isPendingMentor):?><form class="inline-actions" method="post"><input type="hidden" name="action" value="approve_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small" type="submit">Подтвердить</button></form><form class="inline-actions" method="post"><input type="hidden" name="action" value="reject_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small secondary" type="submit">Отклонить</button></form><?php else:?>—<?php endif;?></td></tr><?php endforeach;?></tbody></table></section>
     <?php elseif ($page === 'assignments' && $current['role']==='admin'):
-        $mentorStats=fetch_all($db,"SELECT u.id,u.full_name,u.department,u.position,COUNT(DISTINCT p.user_id) interns,COUNT(t.id) total_tasks,SUM(CASE WHEN t.status='Выполнено' THEN 1 ELSE 0 END) done_tasks FROM users u LEFT JOIN intern_profiles p ON p.mentor_id=u.id LEFT JOIN tasks t ON t.intern_id=p.user_id WHERE u.role='mentor' GROUP BY u.id ORDER BY u.full_name");
+        $mentorStats=fetch_all($db,"SELECT u.id,u.full_name,u.department,u.position,COUNT(DISTINCT p.user_id) interns,COUNT(t.id) total_tasks,SUM(CASE WHEN t.status='Выполнено' THEN 1 ELSE 0 END) done_tasks FROM users u LEFT JOIN intern_profiles p ON p.mentor_id=u.id LEFT JOIN tasks t ON t.intern_id=p.user_id WHERE u.role='mentor' AND u.mentor_status='approved' GROUP BY u.id ORDER BY u.full_name");
         $allInterns=fetch_all($db,"SELECT u.id,p.mentor_id FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE u.role='intern'");
         $statuses=fetch_all($db,'SELECT DISTINCT status FROM intern_profiles ORDER BY status');
         $filterMentor=$_GET['mentor'] ?? 'all'; $filterStatus=trim((string)($_GET['status'] ?? '')); $search=trim((string)($_GET['q'] ?? ''));

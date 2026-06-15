@@ -58,6 +58,7 @@ function init_database(PDO $db): void
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('admin', 'mentor', 'intern')),
+            mentor_status TEXT NOT NULL DEFAULT 'approved' CHECK(mentor_status IN ('approved', 'pending')),
             phone TEXT DEFAULT '',
             department TEXT DEFAULT '',
             position TEXT DEFAULT '',
@@ -139,6 +140,19 @@ function init_database(PDO $db): void
             expires_at INTEGER NOT NULL
         );
     SQL);
+
+    $columns = $db->query("PRAGMA table_info(users)")->fetchAll();
+    $hasMentorStatus = false;
+    foreach ($columns as $column) {
+        if (($column['name'] ?? '') === 'mentor_status') {
+            $hasMentorStatus = true;
+            break;
+        }
+    }
+    if (!$hasMentorStatus) {
+        $db->exec("ALTER TABLE users ADD COLUMN mentor_status TEXT NOT NULL DEFAULT 'approved' CHECK(mentor_status IN ('approved', 'pending'))");
+        $db->exec("UPDATE users SET mentor_status = 'approved'");
+    }
 
     $count = (int)$db->query("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'mentor')")->fetchColumn();
     if ($count === 0) {

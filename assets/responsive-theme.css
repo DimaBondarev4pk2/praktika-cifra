@@ -2637,3 +2637,7 @@ html[data-theme] .auth-card > p.muted {
     border-color: #314a73 !important;
   }
 }
+html[data-theme="light"] .role-option{background:#fff;color:#13213c;border-color:#dfe8f5}
+html[data-theme="dark"] .role-option{background:#0f2038;color:#eaf2ff;border-color:#31517a}
+html[data-theme="dark"] .badge.warn{background:#3b2d0a;color:#ffd76b}
+html[data-theme="dark"] .badge.ok{background:#0f3d2a;color:#8cf0b6}

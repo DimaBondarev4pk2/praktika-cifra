@@ -57,6 +57,7 @@ document.querySelectorAll('input[type="file"]').forEach((input) => {
 
 const cookieBanner = document.querySelector('[data-cookie-banner]');
 const cookieAccept = document.querySelector('[data-cookie-accept]');
+const registerForm = document.querySelector('[data-register-form]');
 
 if (cookieBanner && localStorage.getItem('practice_cookie_accept') !== 'yes') {
   cookieBanner.hidden = false;
@@ -66,3 +67,23 @@ cookieAccept?.addEventListener('click', () => {
   localStorage.setItem('practice_cookie_accept', 'yes');
   if (cookieBanner) cookieBanner.hidden = true;
 });
+
+if (registerForm) {
+  const roleInputs = registerForm.querySelectorAll('input[name="account_type"]');
+  const groups = registerForm.querySelectorAll('[data-register-group]');
+
+  function syncRegisterRole() {
+    const selected = registerForm.querySelector('input[name="account_type"]:checked')?.value || 'intern';
+
+    groups.forEach((group) => {
+      const isActive = group.dataset.registerGroup === selected;
+      group.hidden = !isActive;
+      group.querySelectorAll('[data-required-for]').forEach((field) => {
+        field.required = field.dataset.requiredFor === selected;
+      });
+    });
+  }
+
+  roleInputs.forEach((input) => input.addEventListener('change', syncRegisterRole));
+  syncRegisterRole();
+}
