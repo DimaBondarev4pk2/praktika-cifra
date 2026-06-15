@@ -18,7 +18,7 @@ function action_redirect_target(string $action): string
         'upload_report', 'review_report' => 'index.php?page=reports',
         'add_diary', 'review_diary' => 'index.php?page=diary',
         'update_profile' => 'index.php?page=profile',
-        'approve_mentor', 'reject_mentor' => 'index.php?page=users',
+        'approve_mentor', 'reject_mentor', 'delete_user' => 'index.php?page=users',
         'assign_mentor', 'assign_bulk' => 'index.php?page=assignments',
         'self_attach_intern' => 'index.php?page=interns',
         'finalize' => 'index.php?page=interns',
@@ -454,6 +454,60 @@ if ($action === 'reject_mentor') {
     redirect('index.php?page=users');
 }
 
+if ($action === 'delete_user') {
+    $current = require_role('admin');
+    $userId = (int)($_POST['user_id'] ?? 0);
+    $target = fetch_one($db, 'SELECT id, full_name, role FROM users WHERE id = ?', [$userId]);
+    if (!$target) {
+        flash('Пользователь не найден.', 'error');
+        redirect('index.php?page=users');
+    }
+    if ((int)$target['id'] === (int)$current['id']) {
+        flash('Нельзя удалить свою учётную запись.', 'error');
+        redirect('index.php?page=users');
+    }
+    if ($target['role'] === 'admin') {
+        $adminCount = (int)fetch_one($db, "SELECT COUNT(*) c FROM users WHERE role = 'admin'")['c'];
+        if ($adminCount <= 1) {
+            flash('Нельзя удалить последнего администратора.', 'error');
+            redirect('index.php?page=users');
+        }
+    }
+    $reportFiles = $target['role'] === 'intern'
+        ? fetch_all($db, 'SELECT stored_name FROM reports WHERE intern_id = ?', [$userId])
+        : [];
+
+    $db->beginTransaction();
+    try {
+        if ($target['role'] === 'mentor') {
+            $stmt = $db->prepare('UPDATE intern_profiles SET mentor_id = NULL WHERE mentor_id = ?');
+            $stmt->execute([$userId]);
+            $stmt = $db->prepare("DELETE FROM tasks WHERE mentor_id = ? AND status <> 'Выполнено'");
+            $stmt->execute([$userId]);
+        }
+        $stmt = $db->prepare('DELETE FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $db->commit();
+    } catch (PDOException $exception) {
+        if ($db->inTransaction()) $db->rollBack();
+        flash('Не удалось удалить учётную запись.', 'error');
+        redirect('index.php?page=users');
+    }
+
+    $uploadRoot = realpath(UPLOAD_DIR);
+    if ($uploadRoot) {
+        foreach ($reportFiles as $file) {
+            $filePath = realpath(UPLOAD_DIR . '/' . $file['stored_name']);
+            if ($filePath && strncmp($filePath, $uploadRoot . DIRECTORY_SEPARATOR, strlen($uploadRoot . DIRECTORY_SEPARATOR)) === 0 && is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+    }
+
+    flash('Учётная запись ' . $target['full_name'] . ' удалена.');
+    redirect('index.php?page=users');
+}
+
 if ($action === 'assign_bulk') {
     require_role('admin');
     $mentorId = (int)($_POST['mentor_id'] ?? 0);
@@ -560,8 +614,8 @@ if ($current) {
             document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
         })();
     </script>
-    <link rel="stylesheet" href="assets/style.css?v=20260616-mentor-self-attach">
-    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-mentor-self-attach">
+    <link rel="stylesheet" href="assets/style.css?v=20260616-admin-delete-users">
+    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-admin-delete-users">
 </head>
 <body>
 <header class="topbar">
@@ -766,7 +820,36 @@ if ($current) {
             <button class="button full" type="submit">Сохранить изменения</button>
         </form>
     <?php elseif ($page === 'users' && $current['role']==='admin'):
-        $users=fetch_all($db,'SELECT * FROM users ORDER BY created_at DESC');?><section class="panel table-wrap"><table><thead><tr><th>Пользователь</th><th>Роль</th><th>Email</th><th>Статус</th><th>Дата регистрации</th><th>Действия</th></tr></thead><tbody><?php foreach($users as $u): $isPendingMentor=$u['role']==='mentor' && ($u['mentor_status'] ?? 'approved')==='pending';?><tr><td><b><?=e($u['full_name'])?></b><?php if($u['department']):?><small><?=e($u['department'])?><?= $u['position'] ? ' · '.e($u['position']) : '' ?></small><?php endif;?></td><td><span class="badge"><?=e(role_name($u['role']))?></span></td><td><?=e($u['email'])?></td><td><?= $u['role']==='mentor' ? ($isPendingMentor ? '<span class="badge warn">Ожидает подтверждения</span>' : '<span class="badge ok">Подтверждён</span>') : '—' ?></td><td><?=e(substr($u['created_at'],0,10))?></td><td><?php if($isPendingMentor):?><form class="inline-actions" method="post"><input type="hidden" name="action" value="approve_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small" type="submit">Подтвердить</button></form><form class="inline-actions" method="post"><input type="hidden" name="action" value="reject_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small secondary" type="submit">Отклонить</button></form><?php else:?>—<?php endif;?></td></tr><?php endforeach;?></tbody></table></section>
+        $users=fetch_all($db,'SELECT * FROM users ORDER BY created_at DESC');?>
+        <section class="panel table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Пользователь</th><th>Роль</th><th>Email</th><th>Статус</th><th>Дата регистрации</th><th>Действия</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach($users as $u): $isPendingMentor=$u['role']==='mentor' && ($u['mentor_status'] ?? 'approved')==='pending'; ?>
+                        <tr>
+                            <td><b><?=e($u['full_name'])?></b><?php if($u['department']):?><small><?=e($u['department'])?><?= $u['position'] ? ' · '.e($u['position']) : '' ?></small><?php endif;?></td>
+                            <td><span class="badge"><?=e(role_name($u['role']))?></span></td>
+                            <td><?=e($u['email'])?></td>
+                            <td><?= $u['role']==='mentor' ? ($isPendingMentor ? '<span class="badge warn">Ожидает подтверждения</span>' : '<span class="badge ok">Подтверждён</span>') : '—' ?></td>
+                            <td><?=e(substr($u['created_at'],0,10))?></td>
+                            <td class="user-actions">
+                                <?php if($isPendingMentor):?>
+                                    <form class="inline-actions" method="post"><input type="hidden" name="action" value="approve_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small" type="submit">Подтвердить</button></form>
+                                    <form class="inline-actions" method="post"><input type="hidden" name="action" value="reject_mentor"><?=csrf_field()?><input type="hidden" name="mentor_id" value="<?=$u['id']?>"><button class="button small secondary" type="submit">Отклонить</button></form>
+                                <?php endif;?>
+                                <?php if((int)$u['id'] !== (int)$current['id']):?>
+                                    <form class="inline-actions" method="post" onsubmit="return confirm('Удалить выбранную учётную запись? Это действие нельзя отменить.');"><input type="hidden" name="action" value="delete_user"><?=csrf_field()?><input type="hidden" name="user_id" value="<?=$u['id']?>"><button class="button small danger" type="submit">Удалить</button></form>
+                                <?php else:?>
+                                    <span class="muted">Текущий аккаунт</span>
+                                <?php endif;?>
+                            </td>
+                        </tr>
+                    <?php endforeach;?>
+                </tbody>
+            </table>
+        </section>
     <?php elseif ($page === 'assignments' && $current['role']==='admin'):
         $mentorStats=fetch_all($db,"SELECT u.id,u.full_name,u.department,u.position,COUNT(DISTINCT p.user_id) interns,COUNT(t.id) total_tasks,SUM(CASE WHEN t.status='Выполнено' THEN 1 ELSE 0 END) done_tasks FROM users u LEFT JOIN intern_profiles p ON p.mentor_id=u.id LEFT JOIN tasks t ON t.intern_id=p.user_id WHERE u.role='mentor' AND u.mentor_status='approved' GROUP BY u.id ORDER BY u.full_name");
         $allInterns=fetch_all($db,"SELECT u.id,p.mentor_id FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE u.role='intern'");

@@ -176,3 +176,20 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
     justify-content:center;
   }
 }
+
+/* Admin user actions */
+.button.danger{
+  background:#dc2626;
+  color:#fff!important;
+  box-shadow:0 8px 20px rgba(220,38,38,.2);
+}
+.button.danger:hover{
+  background:#b91c1c;
+}
+.user-actions{
+  min-width:220px;
+}
+.user-actions .muted{
+  display:inline-block;
+  padding:8px 0;
+}
