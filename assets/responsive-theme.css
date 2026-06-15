@@ -2660,3 +2660,15 @@ html[data-theme="dark"] [data-register-form] .mentor-register-notice{
 html[data-theme="dark"] [data-register-form] .mentor-register-notice span{
   color:#b8c8e3!important;
 }
+html[data-theme="dark"] .available-intern-card{
+  background:linear-gradient(135deg,#10233e,#0b1a30)!important;
+  border-color:#31517a!important;
+  box-shadow:0 14px 32px rgba(0,0,0,.22)!important;
+}
+html[data-theme="dark"] .available-intern-card p,
+html[data-theme="dark"] .available-intern-card h3{
+  color:#eaf2ff!important;
+}
+html[data-theme="dark"] .available-intern-card small{
+  color:#b8c8e3!important;
+}

@@ -20,6 +20,7 @@ function action_redirect_target(string $action): string
         'update_profile' => 'index.php?page=profile',
         'approve_mentor', 'reject_mentor' => 'index.php?page=users',
         'assign_mentor', 'assign_bulk' => 'index.php?page=assignments',
+        'self_attach_intern' => 'index.php?page=interns',
         'finalize' => 'index.php?page=interns',
         default => user() ? 'index.php?page=dashboard' : 'index.php?page=login',
     };
@@ -61,7 +62,7 @@ if ($action === 'register') {
     $accountType = ($_POST['account_type'] ?? 'intern') === 'mentor' ? 'mentor' : 'intern';
     $required = $accountType === 'mentor'
         ? ['full_name', 'email', 'password', 'department', 'position']
-        : ['full_name', 'email', 'password', 'university', 'specialty', 'course', 'practice_topic', 'start_date', 'end_date', 'mentor_id'];
+        : ['full_name', 'email', 'password', 'university', 'specialty', 'course', 'practice_topic', 'start_date', 'end_date'];
     foreach ($required as $field) {
         if (trim((string)($_POST[$field] ?? '')) === '') {
             flash('Заполните все обязательные поля.', 'error');
@@ -76,7 +77,8 @@ if ($action === 'register') {
         flash('Дата окончания не может быть раньше даты начала.', 'error');
         redirect('index.php?page=register');
     }
-    if ($accountType === 'intern' && !fetch_one($db, "SELECT id FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [(int)$_POST['mentor_id']])) {
+    $selectedMentorId = trim((string)($_POST['mentor_id'] ?? '')) === '' ? null : (int)$_POST['mentor_id'];
+    if ($accountType === 'intern' && $selectedMentorId !== null && !fetch_one($db, "SELECT id FROM users WHERE id = ? AND role = 'mentor' AND mentor_status = 'approved'", [$selectedMentorId])) {
         flash('Выберите подтверждённого руководителя практики.', 'error');
         redirect('index.php?page=register');
     }
@@ -100,7 +102,7 @@ if ($action === 'register') {
         $stmt->execute([trim($_POST['full_name']), strtolower(trim($_POST['email'])), password_hash($_POST['password'], PASSWORD_DEFAULT), trim($_POST['phone'] ?? '')]);
         $id = (int)$db->lastInsertId();
         $stmt = $db->prepare('INSERT INTO intern_profiles (user_id, university, specialty, course, group_name, practice_topic, start_date, end_date, mentor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$id, trim($_POST['university']), trim($_POST['specialty']), (int)$_POST['course'], trim($_POST['group_name'] ?? ''), trim($_POST['practice_topic']), $_POST['start_date'], $_POST['end_date'], (int)$_POST['mentor_id']]);
+        $stmt->execute([$id, trim($_POST['university']), trim($_POST['specialty']), (int)$_POST['course'], trim($_POST['group_name'] ?? ''), trim($_POST['practice_topic']), $_POST['start_date'], $_POST['end_date'], $selectedMentorId]);
         $db->commit();
         flash('Регистрация завершена. Теперь войдите в личный кабинет.');
         redirect('index.php?page=login');
@@ -403,6 +405,37 @@ if ($action === 'assign_mentor') {
     redirect('index.php?page=assignments');
 }
 
+if ($action === 'self_attach_intern') {
+    $current = require_role('mentor');
+    $internId = (int)($_POST['intern_id'] ?? 0);
+    $intern = fetch_one($db, "SELECT u.id, u.full_name FROM users u JOIN intern_profiles p ON p.user_id = u.id WHERE u.id = ? AND u.role = 'intern' AND p.mentor_id IS NULL", [$internId]);
+    if (!$intern) {
+        flash('Практикант не найден или уже закреплён за руководителем.', 'error');
+        redirect('index.php?page=interns');
+    }
+
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('UPDATE intern_profiles SET mentor_id = ? WHERE user_id = ? AND mentor_id IS NULL');
+        $stmt->execute([$current['id'], $internId]);
+        if ($stmt->rowCount() === 0) {
+            $db->rollBack();
+            flash('Практикант уже закреплён за руководителем.', 'error');
+            redirect('index.php?page=interns');
+        }
+        $taskStmt = $db->prepare("UPDATE tasks SET mentor_id = ? WHERE intern_id = ? AND status <> 'Выполнено'");
+        $taskStmt->execute([$current['id'], $internId]);
+        $db->commit();
+    } catch (PDOException $exception) {
+        if ($db->inTransaction()) $db->rollBack();
+        flash('Не удалось закрепить практиканта. Попробуйте ещё раз.', 'error');
+        redirect('index.php?page=interns');
+    }
+
+    flash('Практикант ' . $intern['full_name'] . ' закреплён за вами.');
+    redirect('index.php?page=interns');
+}
+
 if ($action === 'approve_mentor') {
     require_role('admin');
     $mentorId = (int)($_POST['mentor_id'] ?? 0);
@@ -527,8 +560,8 @@ if ($current) {
             document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
         })();
     </script>
-    <link rel="stylesheet" href="assets/style.css?v=20260616-register-options">
-    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-register-options">
+    <link rel="stylesheet" href="assets/style.css?v=20260616-mentor-self-attach">
+    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-mentor-self-attach">
 </head>
 <body>
 <header class="topbar">
@@ -627,7 +660,7 @@ if ($current) {
         </div>
         <div class="register-group full" data-register-group="intern">
             <div class="form-grid nested-grid">
-                <h3 class="full">Обучение и практика</h3><label>Учебное заведение *<input name="university" data-required-for="intern" required></label><label>Направление подготовки *<input name="specialty" data-required-for="intern" required></label><label>Курс *<input type="number" min="1" max="6" name="course" data-required-for="intern" required></label><label>Группа<input name="group_name"></label><label class="full">Тема практики *<input name="practice_topic" data-required-for="intern" required></label><label>Дата начала *<input type="date" name="start_date" data-required-for="intern" required></label><label>Дата окончания *<input type="date" name="end_date" data-required-for="intern" required></label><label class="full">Руководитель *<select name="mentor_id" data-required-for="intern" required><option value="">Выберите руководителя</option><?php foreach ($mentors as $mentor): ?><option value="<?= $mentor['id'] ?>"><?= e($mentor['full_name'] . ' — ' . $mentor['department']) ?></option><?php endforeach; ?></select></label>
+                <h3 class="full">Обучение и практика</h3><label>Учебное заведение *<input name="university" data-required-for="intern" required></label><label>Направление подготовки *<input name="specialty" data-required-for="intern" required></label><label>Курс *<input type="number" min="1" max="6" name="course" data-required-for="intern" required></label><label>Группа<input name="group_name"></label><label class="full">Тема практики *<input name="practice_topic" data-required-for="intern" required></label><label>Дата начала *<input type="date" name="start_date" data-required-for="intern" required></label><label>Дата окончания *<input type="date" name="end_date" data-required-for="intern" required></label><label class="full">Руководитель<select name="mentor_id"><option value="">Пока без руководителя</option><?php foreach ($mentors as $mentor): ?><option value="<?= $mentor['id'] ?>"><?= e($mentor['full_name'] . ' — ' . $mentor['department']) ?></option><?php endforeach; ?></select></label>
             </div>
         </div>
         <button class="button full" type="submit">Создать аккаунт</button>
@@ -642,9 +675,12 @@ if ($current) {
         <div class="two-col"><section class="panel"><h2>Моя практика</h2><dl class="details"><dt>Тема</dt><dd><?= e($profile['practice_topic']) ?></dd><dt>Период</dt><dd><?= e($profile['start_date']) ?> — <?= e($profile['end_date']) ?></dd><dt>Руководитель</dt><dd><?= e($profile['mentor_name']) ?><small><?= e($profile['department']) ?></small></dd></dl></section><section class="panel"><h2>Быстрые действия</h2><div class="quick"><a href="index.php?page=tasks">Открыть задания <b>→</b></a><a href="index.php?page=diary">Заполнить дневник <b>→</b></a><a href="index.php?page=reports">Загрузить отчёт <b>→</b></a><a href="index.php?page=profile">Посмотреть заключение <b>→</b></a></div></section></div>
     <?php elseif ($page === 'dashboard' && $current['role'] === 'mentor'):
         $interns = fetch_all($db, 'SELECT u.id, u.full_name, p.* FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE p.mentor_id=? ORDER BY u.full_name', [$current['id']]);
+        $availableInterns = fetch_all($db, "SELECT u.id,u.full_name,u.email,p.university,p.specialty,p.course,p.group_name,p.practice_topic,p.start_date,p.end_date,p.status FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE u.role='intern' AND p.mentor_id IS NULL ORDER BY u.full_name LIMIT 5");
+        $availableInternsCount = (int)fetch_one($db, "SELECT COUNT(*) c FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE u.role='intern' AND p.mentor_id IS NULL")['c'];
         $pending = (int)fetch_one($db, "SELECT COUNT(*) amount FROM reports r JOIN intern_profiles p ON p.user_id=r.intern_id WHERE p.mentor_id=? AND r.status='На проверке'", [$current['id']])['amount'];
         $pendingDiary = (int)fetch_one($db, "SELECT COUNT(*) amount FROM diary_entries d JOIN intern_profiles p ON p.user_id=d.intern_id WHERE p.mentor_id=? AND d.status='На проверке'", [$current['id']])['amount']; ?>
-        <div class="stat-grid"><article class="stat"><span>Практикантов</span><strong><?= count($interns) ?></strong></article><article class="stat"><span>Отчётов на проверке</span><strong><?= $pending ?></strong></article><article class="stat"><span>Записей дневника</span><strong><?= $pendingDiary ?></strong></article><article class="stat"><span>Средний прогресс</span><strong><?= count($interns) ? round(array_sum(array_map(fn($i) => progress($db, (int)$i['id']), $interns)) / count($interns)) : 0 ?>%</strong></article></div>
+        <div class="stat-grid"><article class="stat"><span>Практикантов</span><strong><?= count($interns) ?></strong></article><article class="stat"><span>Свободных заявок</span><strong><?= $availableInternsCount ?></strong></article><article class="stat"><span>Отчётов на проверке</span><strong><?= $pending ?></strong></article><article class="stat"><span>Средний прогресс</span><strong><?= count($interns) ? round(array_sum(array_map(fn($i) => progress($db, (int)$i['id']), $interns)) / count($interns)) : 0 ?>%</strong></article></div>
+        <?php render_available_interns($availableInterns); ?>
         <section class="panel"><div class="panel-head"><h2>Прогресс практикантов</h2><a href="index.php?page=interns">Все практиканты →</a></div><?php render_intern_table($db, $interns); ?></section>
     <?php elseif ($page === 'dashboard' && $current['role'] === 'admin'):
         $counts = []; foreach (['intern','mentor','admin'] as $r) $counts[$r]=(int)fetch_one($db,'SELECT COUNT(*) c FROM users WHERE role=?',[$r])['c']; $pendingMentors=(int)fetch_one($db,"SELECT COUNT(*) c FROM users WHERE role='mentor' AND mentor_status='pending'")['c']; ?>
@@ -668,7 +704,9 @@ if ($current) {
         <?php if($current['role']==='intern'):?><form class="panel form-grid diary-form" method="post"><input type="hidden" name="action" value="add_diary"><?= csrf_field() ?><h2 class="full">Новая запись дневника</h2><label>Дата работы<input type="date" name="entry_date" value="<?=date('Y-m-d')?>" required></label><label>Часов практики<input type="number" name="hours" min="1" max="12" value="8" required></label><label class="full">Что было сделано<textarea name="work_done" placeholder="Опишите выполненные задачи, изученные материалы и результат дня" required></textarea></label><button class="button full">Сохранить запись</button></form><?php endif; ?>
         <div class="diary-list"><?php foreach($entries as $entry):?><article class="diary-card"><div class="diary-date"><strong><?=e($entry['entry_date'])?></strong><span><?= (int)$entry['hours'] ?> ч</span></div><div class="diary-body"><span class="badge"><?=e($entry['status'])?></span><h3><?= $current['role']==='mentor' ? e($entry['intern_name']) : 'Запись дневника' ?></h3><p><?=nl2br(e($entry['work_done']))?></p><?php if($entry['mentor_comment']):?><blockquote><?=e($entry['mentor_comment'])?></blockquote><?php endif;?></div><?php if($current['role']==='mentor'):?><form method="post" class="review diary-review"><input type="hidden" name="action" value="review_diary"><?= csrf_field() ?><input type="hidden" name="entry_id" value="<?=$entry['id']?>"><select name="status"><option>Принято</option><option>Нужна доработка</option></select><input name="mentor_comment" placeholder="Комментарий руководителя"><button class="button small">Проверить</button></form><?php endif;?></article><?php endforeach;?><?php if(!$entries):?><div class="empty">Записей дневника пока нет.</div><?php endif;?></div>
     <?php elseif ($page === 'interns' && $current['role']==='mentor'):
-        $interns=fetch_all($db,'SELECT u.id,u.full_name,u.email,p.* FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE p.mentor_id=? ORDER BY u.full_name',[$current['id']]); ?>
+        $interns=fetch_all($db,'SELECT u.id,u.full_name,u.email,p.* FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE p.mentor_id=? ORDER BY u.full_name',[$current['id']]);
+        $availableInterns=fetch_all($db,"SELECT u.id,u.full_name,u.email,p.university,p.specialty,p.course,p.group_name,p.practice_topic,p.start_date,p.end_date,p.status FROM users u JOIN intern_profiles p ON p.user_id=u.id WHERE u.role='intern' AND p.mentor_id IS NULL ORDER BY u.full_name"); ?>
+        <?php render_available_interns($availableInterns); ?>
         <section class="panel"><?php render_intern_table($db,$interns,true);?></section>
     <?php elseif ($page === 'intern_detail' && $current['role']==='mentor'):
         $internId = (int)($_GET['id'] ?? 0);
@@ -772,3 +810,35 @@ if ($current) {
 <?php
 function render_intern_table(PDO $db, array $interns, bool $withConclusion = false): void { ?>
 <div class="table-wrap"><table><thead><tr><th>Практикант</th><th>Тема</th><th>Период</th><th>Прогресс</th><th>Статус</th><?= $withConclusion?'<th>Заключение</th>':''?></tr></thead><tbody><?php foreach($interns as $i): $p=progress($db,(int)$i['id']);?><tr><td><a class="intern-link" href="index.php?page=intern_detail&id=<?=$i['id']?>"><?=e($i['full_name'])?></a><small><?=e($i['specialty'])?></small></td><td><?=e($i['practice_topic'])?></td><td><?=e($i['start_date'])?><small>до <?=e($i['end_date'])?></small></td><td><div class="progress compact"><i style="width:<?=$p?>%"></i></div><small><?=$p?>%</small></td><td><span class="badge"><?=e($i['status'])?></span></td><?php if($withConclusion):?><td><details><summary>Заполнить</summary><form class="mini-form" method="post"><input type="hidden" name="action" value="finalize"><?= csrf_field() ?><input type="hidden" name="intern_id" value="<?=$i['id']?>"><input name="final_grade" placeholder="Оценка" required><textarea name="conclusion" placeholder="Заключение" required></textarea><button class="button small">Сохранить</button></form></details></td><?php endif;?></tr><?php endforeach;?></tbody></table><?php if(!$interns):?><div class="empty">Закреплённых практикантов пока нет.</div><?php endif;?></div><?php }
+
+function render_available_interns(array $interns): void { ?>
+<section class="panel available-interns-panel">
+    <div class="panel-head">
+        <div>
+            <h2>Свободные практиканты</h2>
+            <p class="muted">Здесь показаны студенты, которые пока не закреплены за руководителем. Вы можете прикрепить их к себе.</p>
+        </div>
+        <span class="badge">Показано: <?= count($interns) ?></span>
+    </div>
+    <div class="available-intern-grid">
+        <?php foreach ($interns as $intern): ?>
+            <article class="available-intern-card">
+                <div>
+                    <span class="badge"><?= e($intern['status']) ?></span>
+                    <h3><?= e($intern['full_name']) ?></h3>
+                    <p><?= e($intern['practice_topic']) ?></p>
+                    <small><?= e($intern['university']) ?> · <?= e($intern['specialty']) ?>, <?= e((string)$intern['course']) ?> курс<?= $intern['group_name'] ? ', ' . e($intern['group_name']) : '' ?></small>
+                    <small><?= e($intern['start_date']) ?> — <?= e($intern['end_date']) ?></small>
+                </div>
+                <form method="post">
+                    <input type="hidden" name="action" value="self_attach_intern">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="intern_id" value="<?= (int)$intern['id'] ?>">
+                    <button class="button small" type="submit">Прикрепить к себе</button>
+                </form>
+            </article>
+        <?php endforeach; ?>
+        <?php if (!$interns): ?><div class="empty">Свободных практикантов сейчас нет.</div><?php endif; ?>
+    </div>
+</section>
+<?php }

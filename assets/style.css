@@ -122,6 +122,46 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
   margin-left:auto;
   margin-right:auto;
 }
+.available-interns-panel .panel-head{
+  align-items:flex-start;
+  gap:18px;
+}
+.available-interns-panel h2{
+  margin-bottom:6px;
+}
+.available-intern-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+.available-intern-card{
+  display:grid;
+  gap:16px;
+  align-content:space-between;
+  padding:18px;
+  border:1px solid #cfe0fb;
+  border-radius:18px;
+  background:linear-gradient(135deg,#fff,#f2f7ff);
+  box-shadow:0 14px 32px rgba(20,87,217,.08);
+}
+.available-intern-card h3{
+  margin:10px 0 6px;
+  font-size:20px;
+}
+.available-intern-card p{
+  margin:0 0 10px;
+  color:#334155;
+  font-weight:700;
+}
+.available-intern-card small{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+}
+.available-intern-card .button{
+  width:100%;
+}
 @media(max-width:650px){
   [data-register-form] .account-type-options{
     gap:12px;
