@@ -527,8 +527,8 @@ if ($current) {
             document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
         })();
     </script>
-    <link rel="stylesheet" href="assets/style.css?v=20260616-register-polish">
-    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-register-polish">
+    <link rel="stylesheet" href="assets/style.css?v=20260616-register-options">
+    <link rel="stylesheet" href="assets/responsive-theme.css?v=20260616-register-options">
 </head>
 <body>
 <header class="topbar">
@@ -609,8 +609,10 @@ if ($current) {
     <section class="page-head compact"><span class="eyebrow">Новая заявка</span><h1>Регистрация в системе</h1><p>Практикант создаёт аккаунт сразу, а регистрация руководителя активируется после подтверждения администратором.</p></section>
     <form class="panel form-grid" method="post" data-register-form><input type="hidden" name="action" value="register"><?= csrf_field() ?>
         <h3 class="full">Тип аккаунта</h3>
-        <label class="role-option"><input type="radio" name="account_type" value="intern" checked> Практикант</label>
-        <label class="role-option"><input type="radio" name="account_type" value="mentor"> Руководитель практики</label>
+        <div class="account-type-options full">
+            <label class="role-option"><input type="radio" name="account_type" value="intern" checked> Практикант</label>
+            <label class="role-option"><input type="radio" name="account_type" value="mentor"> Руководитель практики</label>
+        </div>
         <h3 class="full">Личные данные</h3><label>ФИО *<input name="full_name" required></label><label>Email *<input type="email" name="email" required></label><label>Телефон<input name="phone"></label><label>Пароль *<input type="password" name="password" minlength="8" required></label>
         <div class="register-group full" data-register-group="mentor" hidden>
             <div class="form-grid nested-grid">

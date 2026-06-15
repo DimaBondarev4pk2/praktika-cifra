@@ -55,7 +55,7 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
   color:var(--ink);
 }
 [data-register-form] label{
-  text-align:center;
+  text-align:left;
   font-size:15px;
   line-height:1.35;
 }
@@ -64,8 +64,17 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
 [data-register-form] textarea{
   text-align:left;
 }
-[data-register-form] .role-option{
+[data-register-form] .account-type-options{
+  display:flex;
   justify-content:center;
+  align-items:center;
+  gap:42px;
+  flex-wrap:wrap;
+  margin:4px 0 16px;
+}
+[data-register-form] .role-option{
+  justify-content:flex-start;
+  width:auto;
   min-height:48px;
   padding:6px 10px;
   border:0!important;
@@ -75,6 +84,8 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
   color:var(--ink);
   font-size:18px;
   font-weight:800;
+  white-space:nowrap;
+  text-align:left;
 }
 [data-register-form] .role-option input{
   width:18px;
@@ -83,4 +94,18 @@ footer{height:78px}.footer-brand{display:flex;align-items:center;gap:9px;color:v
 }
 [data-register-form] .nested-grid{
   width:100%;
+}
+.page-head.compact p{
+  margin-left:auto;
+  margin-right:auto;
+}
+@media(max-width:650px){
+  [data-register-form] .account-type-options{
+    gap:12px;
+    display:grid;
+    justify-items:center;
+  }
+  [data-register-form] .role-option{
+    justify-content:center;
+  }
 }
